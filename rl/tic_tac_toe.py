@@ -1,5 +1,6 @@
 """Reinforced learning algorithm to play Tic Tac Toe."""
 import re
+import random
 
 
 class Player:
@@ -20,10 +21,12 @@ class Player:
     def _initialise_value(self, env):
         value = dict()
         states = env.list_all_states()
-        for state in states():
+        for state in states:
             if env.is_win(self.number, state):
                 value[state] = 1
-            elif env.is_loss(self.number, state) or env.is_draw(state):
+            elif env.is_loss(self.number, state):
+                value[state] = -1
+            elif env.is_draw(state):
                 value[state] = 0
             else:
                 value[state] = 0.5
@@ -31,15 +34,41 @@ class Player:
 
     def take_action(self, env):
         """Make a valid move on env."""
-        pass
+        possible_actions = []
+        for i, char in enumerate(env.state):
+            if char == '0':
+                state = env.state[:i] + self.number + env.state[(i + 1):]
+                possible_actions.append({'a': i, 'v': self.valueFunction[state]})
+
+        if random.random() < self.epsilon:
+            chosen_action = random.choice([i['a'] for i in possible_actions])
+        else:
+            maxA = [possible_actions[0]['a']]
+            maxV = possible_actions[0]['v']
+            for i, A in enumerate(possible_actions):
+                if i > 0:
+                    if A['v'] > maxV:
+                        maxV = A['v']
+                        maxA = [A['a']]
+                    elif A['v'] == maxV:
+                        maxA.append(A['a'])
+            chosen_action = random.choice(maxA)
+
+        env.accept_action(self, chosen_action)
 
     def update_state_history(self, state):
         """Update internal state history."""
         self.stateHistory.append(state)
 
-    def update(self, env):
+    def update(self):
         """Update value function."""
-        pass
+        rev = list(reversed(self.stateHistory))
+        next_state = rev[0]
+        states = rev[1:]
+        for state in states:
+            self.valueFunction[state] = self.valueFunction[state] + self.epsilon*(self.valueFunction[next_state]-self.valueFunction[state])
+            next_state = state
+        self.stateHistory = []
 
 
 class Environment:
@@ -51,15 +80,17 @@ class Environment:
 
     def draw_board(self):
         """Draw current board state."""
-        print('----------')
-        print(self.state)
-        print('----------')
+        print('---')
+        print(self.state[:3])
+        print(self.state[3:6])
+        print(self.state[6:])
+        print('---')
 
     def accept_action(self, player, action):
         """Allow agent to take an action."""
         playerNumber = player.number
         if self.state[action] == '0':
-            self.state[action] = playerNumber
+            self.state = self.state[:action] + playerNumber + self.state[(action + 1):]
         else:
             raise RuntimeError('Player attemted to play invalid action.')
 
@@ -145,6 +176,9 @@ class Environment:
         else:
             return False
 
+    def clear(self):
+        self.state = '000000000'
+
 
 def play_game(p1, p2, env, draw=False):
     """Play game for 1 episode."""
@@ -160,9 +194,6 @@ def play_game(p1, p2, env, draw=False):
 
         # draw the board
         if draw:
-            if draw == 1 and current_player == p1:
-                env.draw_board()
-            if draw == 2 and current_player == p1:
                 env.draw_board()
 
         # current_player makes a move
@@ -176,5 +207,22 @@ def play_game(p1, p2, env, draw=False):
         env.draw_board()
 
     # do the value function update
-    p1.update(env)
-    p2.update(env)
+    p1.update()
+    p2.update()
+    env.clear()
+
+
+env = Environment()
+pA = Player('1', 0.1, env)
+pB = Player('2', 0.1, env)
+
+# print('Untrained')
+# play_game(pA, pB, env, draw=True)
+for i in range(10000):
+    if (i % 2) == 0:
+        play_game(pA, pB, env)
+    else:
+        play_game(pB, pA, env)
+
+print('Trained')
+play_game(pA, pB, env, draw=True)
