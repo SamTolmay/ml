@@ -79,16 +79,17 @@ class Player:
 class Human:
     """Class to allow user to play."""
 
-    def __init__(self, symbol):
+    def __init__(self, symbol, name):
         """Initialise agent.
 
         symbol - String 'X' or 'O' representing symbol player will use,
         """
         self.symbol = symbol
+        self.name = name
         welcome = """Welcome human player.
 you are playing with symbol {}
 You will be prompted to make a move when it is your turn.
-You should enter a number between 0 and 9, to indicate which position
+You should enter a number from 1 to 9, to indicate which position
 you would like to place your symbol. The positions are numbered from
 left to right, top to bottom:
 123
@@ -101,7 +102,7 @@ left to right, top to bottom:
         """Promt user for a move."""
         print('Current board state')
         env.draw_board()
-        print('Please select a position to make a move:')
+        print('{}, Please select a position to make a move:'.format(self.name))
         action = self._prompt_action(env)
         env.accept_action(self, action)
 
@@ -278,7 +279,7 @@ def play_game(p1, p2, env, draw=False):
 env = Environment()
 p1 = Player('X', 1, 0.1, env)
 p2 = Player('O', 1, 0.1, env)
-human = Human('O')
+human = Human('O', 'Sam')
 
 
 print('Training AI')
