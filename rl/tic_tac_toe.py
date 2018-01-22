@@ -1,30 +1,34 @@
 """Reinforced learning algorithm to play Tic Tac Toe."""
 import re
+import math
 import random
 
 
 class Player:
     """Agent to play tic tac toe."""
 
-    def __init__(self, number, epsilon, env):
+    def __init__(self, symbol, epsilon, alpha, env):
         """Initialise agent.
 
-        number - String '1' or '2' representing symbol player will use,
-        epsilon - learning rate
+        symbol - String 'X' or 'O' representing symbol player will use,
+        epsilon - learning rate for epsilon greedy
+        alpha - learning rate when updating value function
         env - Environment object
         """
-        self.number = number
+        self.symbol = symbol
         self.epsilon = epsilon
+        self.alpha = alpha
         self.stateHistory = []
         self.valueFunction = self._initialise_value(env)
+        self.t = 1
 
     def _initialise_value(self, env):
         value = dict()
         states = env.list_all_states()
         for state in states:
-            if env.is_win(self.number, state):
+            if env.is_win(self.symbol, state):
                 value[state] = 1
-            elif env.is_loss(self.number, state):
+            elif env.is_loss(self.symbol, state):
                 value[state] = -1
             elif env.is_draw(state):
                 value[state] = 0
@@ -36,11 +40,11 @@ class Player:
         """Make a valid move on env."""
         possible_actions = []
         for i, char in enumerate(env.state):
-            if char == '0':
-                state = env.state[:i] + self.number + env.state[(i + 1):]
+            if char == '-':
+                state = env.state[:i] + self.symbol + env.state[(i + 1):]
                 possible_actions.append({'a': i, 'v': self.valueFunction[state]})
 
-        if random.random() < self.epsilon:
+        if random.random() < self.epsilon/(math.log(self.t) + 1):
             chosen_action = random.choice([i['a'] for i in possible_actions])
         else:
             maxA = [possible_actions[0]['a']]
@@ -60,15 +64,72 @@ class Player:
         """Update internal state history."""
         self.stateHistory.append(state)
 
-    def update(self):
+    def update(self, env):
         """Update value function."""
         rev = list(reversed(self.stateHistory))
         next_state = rev[0]
         states = rev[1:]
         for state in states:
-            self.valueFunction[state] = self.valueFunction[state] + self.epsilon*(self.valueFunction[next_state]-self.valueFunction[state])
+            self.valueFunction[state] = self.valueFunction[state] + self.alpha*(self.valueFunction[next_state]-self.valueFunction[state])
             next_state = state
         self.stateHistory = []
+        self.t += 1
+
+
+class Human:
+    """Class to allow user to play."""
+
+    def __init__(self, symbol):
+        """Initialise agent.
+
+        symbol - String 'X' or 'O' representing symbol player will use,
+        """
+        self.symbol = symbol
+        welcome = """Welcome human player.
+you are playing with symbol {}
+You will be prompted to make a move when it is your turn.
+You should enter a number between 0 and 9, to indicate which position
+you would like to place your symbol. The positions are numbered from
+left to right, top to bottom:
+123
+456
+789
+""".format(symbol)
+        print(welcome)
+
+    def take_action(self, env):
+        """Promt user for a move."""
+        print('Current board state')
+        env.draw_board()
+        print('Please select a position to make a move:')
+        action = self._prompt_action(env)
+        env.accept_action(self, action)
+
+    def _prompt_action(self, env):
+        try:
+            action = int(input()) - 1
+        except Exception:
+            print('That was not a valid move. Please try again.')
+            action = self._prompt_action(env)
+        if action not in range(0, 9) or env.state[action] is not '-':
+                print('That was not a valid move. Please try again.')
+                action = self._prompt_action(env)
+        return action
+
+    def update_state_history(self, state):
+        """Update internal state history."""
+        pass
+
+    def update(self, env):
+        """Update value function."""
+        if env.is_win(self.symbol, env.state):
+            print('You have won')
+        elif env.is_loss(self.symbol, env.state):
+            print('You have lost')
+        elif env.is_draw(env.state):
+            print('The game ended in a draw')
+        print('The final board state was:')
+        env.draw_board()
 
 
 class Environment:
@@ -76,33 +137,34 @@ class Environment:
 
     def __init__(self):
         """Initialise environment."""
-        self.state = '000000000'
+        self.state = '---------'
 
     def draw_board(self):
         """Draw current board state."""
-        print('---')
         print(self.state[:3])
         print(self.state[3:6])
         print(self.state[6:])
-        print('---')
+        print('***')
 
     def accept_action(self, player, action):
         """Allow agent to take an action."""
-        playerNumber = player.number
-        if self.state[action] == '0':
-            self.state = self.state[:action] + playerNumber + self.state[(action + 1):]
+        if self.state[action] == '-':
+            self.state = self.state[:action] + player.symbol + self.state[(action + 1):]
         else:
             raise RuntimeError('Player attemted to play invalid action.')
 
     def _ternary(self, n):
         """Convert number representation to string representation in base 3."""
         if n == 0:
-            return '000000000'
+            return '---------'
+        symMap = {0: '-',
+                  1: 'X',
+                  2: 'O'}
         nums = []
         while n:
             n, r = divmod(n, 3)
-            nums.append(str(r))
-        return ''.join(reversed(nums)).zfill(9)
+            nums.append(symMap[r])
+        return ''.join(reversed(nums)).rjust(9, '-')
 
     def list_all_states(self):
         """Create a list of all possible tic tac toe board states.
@@ -116,33 +178,33 @@ class Environment:
 
     def _is_full(self, state):
         """Regex checks if all positions are either 1 or 2."""
-        pattern = re.compile(r"^[1|2]{9}$")
+        pattern = re.compile(r"^[X|O]{9}$")
         if pattern.match(state):
             return True
         else:
             return False
 
-    def is_win(self, playerNumber, state):
+    def is_win(self, playerSymbol, state):
         """Check if player has won."""
-        if playerNumber == '1':
-            p1 = re.compile(r"^1.{2}1.{2}1.{2}$")  # 1's in 1st column
-            p2 = re.compile(r"^.1.{2}1.{2}1.$")  # 1's in 2nd column
-            p3 = re.compile(r"^.{2}1.{2}1.{2}1$")  # 1's in 3rd column
-            p4 = re.compile(r"^1{3}.{6}$")  # 1's in 1st row
-            p5 = re.compile(r"^.{3}1{3}.{3}$")  # 1's in 2nd row
-            p6 = re.compile(r"^.{6}1{3}$")  # 1's in 3rd row
-            p7 = re.compile(r"^1.{3}1.{3}1$")  # 1's in diagonal l->r
-            p8 = re.compile(r"^.{2}1.1.1.{2}$")  # 1's in diagonal r->l
+        if playerSymbol == 'X':
+            p1 = re.compile(r"^X.{2}X.{2}X.{2}$")  # X's in 1st column
+            p2 = re.compile(r"^.X.{2}X.{2}X.$")  # X's in 2nd column
+            p3 = re.compile(r"^.{2}X.{2}X.{2}X$")  # X's in 3rd column
+            p4 = re.compile(r"^X{3}.{6}$")  # X's in 1st row
+            p5 = re.compile(r"^.{3}X{3}.{3}$")  # X's in 2nd row
+            p6 = re.compile(r"^.{6}X{3}$")  # X's in 3rd row
+            p7 = re.compile(r"^X.{3}X.{3}X$")  # X's in diagonal l->r
+            p8 = re.compile(r"^.{2}X.X.X.{2}$")  # X's in diagonal r->l
 
-        elif playerNumber == '2':
-            p1 = re.compile(r"^2.{2}2.{2}2.{2}$")  # 2's in 1st column
-            p2 = re.compile(r"^.2.{2}2.{2}2.$")  # 2's in 2nd column
-            p3 = re.compile(r"^.{2}2.{2}2.{2}2$")  # 2's in 3rd column
-            p4 = re.compile(r"^2{3}.{6}$")  # 2's in 1st row
-            p5 = re.compile(r"^.{3}2{3}.{3}$")  # 2's in 2nd row
-            p6 = re.compile(r"^.{6}2{3}$")  # 2's in 3rd row
-            p7 = re.compile(r"^2.{3}2.{3}2$")  # 2's in diagonal l->r
-            p8 = re.compile(r"^.{2}2.2.2.{2}$")  # 2's in diagonal r->l
+        elif playerSymbol == 'O':
+            p1 = re.compile(r"^O.{2}O.{2}O.{2}$")  # O's in 1st column
+            p2 = re.compile(r"^.O.{2}O.{2}O.$")  # O's in 2nd column
+            p3 = re.compile(r"^.{2}O.{2}O.{2}O$")  # O's in 3rd column
+            p4 = re.compile(r"^O{3}.{6}$")  # O's in 1st row
+            p5 = re.compile(r"^.{3}O{3}.{3}$")  # O's in 2nd row
+            p6 = re.compile(r"^.{6}O{3}$")  # O's in 3rd row
+            p7 = re.compile(r"^O.{3}O.{3}O$")  # O's in diagonal l->r
+            p8 = re.compile(r"^.{2}O.O.O.{2}$")  # O's in diagonal r->l
         else:
             raise RuntimeError('Invalid playerNumber')
 
@@ -155,29 +217,30 @@ class Environment:
 
     def is_loss(self, playerNumber, state):
         """Check if game is lost for player at specified state."""
-        if playerNumber == '1':
-            return self.is_win('2', state)
-        elif playerNumber == '2':
-            return self.is_win('1', state)
+        if playerNumber == 'X':
+            return self.is_win('O', state)
+        elif playerNumber == 'O':
+            return self.is_win('X', state)
         else:
             raise RuntimeError('Invalid playerNumber', state)
 
     def is_draw(self, state):
         """Check if game is drawn for specified state."""
-        if not (self.is_win('1', state) or self.is_win('2', state)) and self._is_full(state):
+        if not (self.is_win('X', state) or self.is_win('O', state)) and self._is_full(state):
             return True
         else:
             return False
 
     def game_over(self):
         """Check if game is over."""
-        if self.is_win('1', self.state) or self.is_win('2', self.state) or self._is_full(self.state):
+        if self.is_win('X', self.state) or self.is_win('O', self.state) or self._is_full(self.state):
             return True
         else:
             return False
 
     def clear(self):
-        self.state = '000000000'
+        """Reset game state."""
+        self.state = '---------'
 
 
 def play_game(p1, p2, env, draw=False):
@@ -207,22 +270,27 @@ def play_game(p1, p2, env, draw=False):
         env.draw_board()
 
     # do the value function update
-    p1.update()
-    p2.update()
+    p1.update(env)
+    p2.update(env)
     env.clear()
 
 
 env = Environment()
-pA = Player('1', 0.1, env)
-pB = Player('2', 0.1, env)
+p1 = Player('X', 1, 0.1, env)
+p2 = Player('O', 1, 0.1, env)
+human = Human('O')
 
-# print('Untrained')
-# play_game(pA, pB, env, draw=True)
-for i in range(10000):
+
+print('Training AI')
+for i in range(5000):
     if (i % 2) == 0:
-        play_game(pA, pB, env)
+        play_game(p1, p2, env)
     else:
-        play_game(pB, pA, env)
+        play_game(p2, p1, env)
 
-print('Trained')
-play_game(pA, pB, env, draw=True)
+print('Human turn 1')
+play_game(p1, human, env)
+print('Human turn 2')
+play_game(human, p1, env)
+print('Human turn 3')
+play_game(p1, human, env)
