@@ -2,6 +2,7 @@
 import re
 import math
 import random
+from collections import Counter
 
 
 class Player:
@@ -18,9 +19,10 @@ class Player:
         self.symbol = symbol
         self.epsilon = epsilon
         self.alpha = alpha
-        self.stateHistory = []
-        self.valueFunction = self._initialise_value(env)
         self.t = 1
+        self.stateHistory = []
+        self.winHistory = Counter()
+        self.valueFunction = self._initialise_value(env)
 
     def _initialise_value(self, env):
         value = dict()
@@ -68,6 +70,12 @@ class Player:
         """Update value function."""
         rev = list(reversed(self.stateHistory))
         next_state = rev[0]
+        if env.is_win(self.symbol, next_state):
+            self.winHistory['win'] += 1
+        if env.is_loss(self.symbol, next_state):
+            self.winHistory['loss'] += 1
+        if env.is_draw(next_state):
+            self.winHistory['draw'] += 1
         states = rev[1:]
         for state in states:
             self.valueFunction[state] = self.valueFunction[state] + self.alpha*(self.valueFunction[next_state]-self.valueFunction[state])
@@ -75,6 +83,12 @@ class Player:
         self.stateHistory = []
         self.t += 1
 
+    def winSummary(self):
+        """Print summary of win rate."""
+        print('Played {} games with {}'.format(self.t-1, self.symbol))
+        print('Won {} games - {}'.format(self.winHistory['win'], self.winHistory['win']/(self.t-1)))
+        print('Lost {} games - {}'.format(self.winHistory['loss'], self.winHistory['loss']/(self.t-1)))
+        print('Drew {} games - {}'.format(self.winHistory['draw'], self.winHistory['draw']/(self.t-1)))
 
 class Human:
     """Class to allow user to play."""
@@ -279,7 +293,7 @@ def play_game(p1, p2, env, draw=False):
 env = Environment()
 p1 = Player('X', 1, 0.1, env)
 p2 = Player('O', 1, 0.1, env)
-human = Human('O', 'Sam')
+human = Human('O', 'JL')
 
 
 print('Training AI')
@@ -288,6 +302,9 @@ for i in range(5000):
         play_game(p1, p2, env)
     else:
         play_game(p2, p1, env)
+
+p1.winSummary()
+p2.winSummary()
 
 print('Human turn 1')
 play_game(p1, human, env)
